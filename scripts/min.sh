@@ -627,7 +627,6 @@ install_pkg curl
 install_pkg git
 install_pkg mailx
 install_pkg e2fsprogs
-# install_pkg redhat-lsb  # skipped on alpine
 install_pkg vim
 install_pkg unzip
 install_pkg bind
@@ -635,7 +634,6 @@ install_pkg bind-tools
 rm_if_exists /tmp/dotfiles
 rm_if_exists /root/anaconda-ks.cfg /var/log/anaconda
 run_external "apk upgrade"
-[ $RELEASE_VER -ge 9 ] && install_pkg glibc-langpack-en
 ##################################################################################################################
 printf_head "Enabling ip forwarding"
 ##################################################################################################################
@@ -683,7 +681,6 @@ install_pkg cronie
 # install_pkg crontabs  # skipped on alpine
 install_pkg curl
 install_pkg ctags
-# install_pkg deltarpm  # skipped on alpine
 install_pkg dialog
 install_pkg docker
 install_pkg ethtool
@@ -744,18 +741,18 @@ install_pkg perl-dbd-mysql
 # install_pkg perl-DBD-SQLite  # skipped on alpine
 # install_pkg perl-DBD-MariaDB  # skipped on alpine
 # install_pkg perl-DBD-Firebird  # skipped on alpine
-install_pkg php83
-install_pkg php83-cli
+# install_pkg php  # skipped on alpine
+# install_pkg php-cli  # skipped on alpine
 # install_pkg php-common  # skipped on alpine
-install_pkg php83-fpm
-install_pkg php83-gd
-install_pkg php83-gmp
-install_pkg php83-intl
-install_pkg php83-mbstring
-install_pkg php83-pdo_mysql
-install_pkg php83-pdo
-install_pkg php83-pgsql
-install_pkg php83-xml
+# install_pkg php-fpm  # skipped on alpine
+# install_pkg php-gd  # skipped on alpine
+# install_pkg php-gmp  # skipped on alpine
+# install_pkg php-intl  # skipped on alpine
+# install_pkg php-mbstring  # skipped on alpine
+# install_pkg php-mysqlnd  # skipped on alpine
+# install_pkg php-pdo  # skipped on alpine
+# install_pkg php-pgsql  # skipped on alpine
+# install_pkg php-xml  # skipped on alpine
 install_pkg pinentry
 install_pkg postfix
 # install_pkg postfix-pcre  # skipped on alpine
@@ -800,6 +797,31 @@ install_pkg xz-libs
 # install_pkg yum-utils  # skipped on alpine
 install_pkg zip
 install_pkg zlib
+##################################################################################################################
+printf_head "Installing version-specific packages"
+##################################################################################################################
+# Select PHP slot matching the running Alpine version
+_ALPINE_VER="$(cat /etc/alpine-release 2>/dev/null | cut -d. -f1,2)"
+case "$_ALPINE_VER" in
+    3.1[0-3]*) _PHP="php7" ;;
+    3.1[45]*)  _PHP="php8" ;;
+    3.16*)     _PHP="php8" ;;
+    3.17*)     _PHP="php81" ;;
+    3.18*)     _PHP="php82" ;;
+    *)         _PHP="php83" ;;
+esac
+install_pkg ${_PHP}
+install_pkg ${_PHP}-cli
+install_pkg ${_PHP}-fpm
+install_pkg ${_PHP}-gd
+install_pkg ${_PHP}-gmp
+install_pkg ${_PHP}-intl
+install_pkg ${_PHP}-mbstring
+install_pkg ${_PHP}-pdo_mysql
+install_pkg ${_PHP}-pdo
+install_pkg ${_PHP}-pgsql
+install_pkg ${_PHP}-xml
+unset _PHP _ALPINE_VER
 ##################################################################################################################
 if [ "$SYSTEM_TYPE" = "dns" ]; then
 	if devnull install_pkg ntp || devnull install_pkg ntpsec; then
