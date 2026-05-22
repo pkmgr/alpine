@@ -57,7 +57,7 @@ read -r -t 30 -p "Enter your full hostname: (default: $HOSTNAME) " set_hostname
 set_hostname="${set_hostname:-$(hostname -f 2>/dev/null)}"
 set_hostname="${set_hostname:-$HOSTNAME}"
 if [ -n "$set_hostname" ]; then
-	if hostnamectl set-hostname "$set_hostname" && echo "$set_hostname" >/etc/hostname; then
+	if command -v hostnamectl >/dev/null 2>&1 && hostnamectl set-hostname "$set_hostname" && echo "$set_hostname" >/etc/hostname; then
 		type -P hostname >/dev/null 2>&1 && hostname -F /etc/hostname
 	fi
 	MY_HOST_NAME="$set_hostname"
@@ -81,7 +81,7 @@ else
 fi
 if [ -n "$root_pass_1" ]; then
 	if [ "$root_pass_1" = "$root_pass_2" ]; then
-		echo "$root_pass_1" | passwd --stdin root >/dev/null
+		echo "root:$root_pass_1" | chpasswd >/dev/null
 	fi
 fi
 unset root_pass_1 root_pass_2
@@ -153,6 +153,11 @@ if [ ! -d "/usr/local/share/CasjaysDev/scripts" ]; then
 	sleep 5
 fi
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Create apt shim so system-installer.bash recognises a package manager on Alpine
+if ! command -v apt >/dev/null 2>&1 && command -v apk >/dev/null 2>&1; then
+	printf '#!/bin/sh\nexec apk add --no-cache "$@"\n' >/usr/local/bin/apt && chmod +x /usr/local/bin/apt
+fi
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Set functions
 SCRIPTSFUNCTURL="${SCRIPTSFUNCTURL:-https://github.com/casjay-dotfiles/scripts/raw/main/functions}"
 SCRIPTSFUNCTDIR="${SCRIPTSFUNCTDIR:-/usr/local/share/CasjaysDev/scripts}"
@@ -167,6 +172,24 @@ else
 	. "/tmp/$SCRIPTSFUNCTFILE"
 fi
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Override execute() for Alpine busybox mktemp compatibility
+execute() {
+	local cmd="$1"
+	local msg="${2:-$1}"
+	local tmpf
+	tmpf="$(mktemp)" || tmpf="/tmp/execute_$$"
+	printf '[ / ] %s\r' "$msg"
+	if eval "$cmd" >/dev/null 2>"$tmpf"; then
+		printf_execute_success "$msg"
+		rm -f "$tmpf"
+		return 0
+	else
+		printf_execute_error "$msg"
+		printf_execute_error_stream <"$tmpf"
+		rm -f "$tmpf"
+		return 1
+	fi
+}
 SCRIPT_OS="Alpine"
 SCRIPT_DESCRIBE="Minimal"
 GITHUB_USER="${GITHUB_USER:-casjay}"
@@ -207,7 +230,7 @@ SERVICES_ENABLE="docker apache2 nginx php-fpm83 postfix rsyslog sshd "
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 SERVICES_DISABLE="avahi-daemon cups irqbalance"
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-if ! grep --no-filename -sE '^ID=|^ID_LIKE=|^NAME=' /etc/*-release | grep -qiwE "alpine"; then
+if ! grep -h -sE '^ID=|^ID_LIKE=|^NAME=' /etc/*-release | grep -qiwE "alpine"; then
 	printf_exit "This installer is meant to be run on a $SCRIPT_OS based system"
 fi
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
