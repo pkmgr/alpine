@@ -764,18 +764,27 @@ install_pkg perl-dbd-mysql
 # install_pkg perl-DBD-SQLite  # skipped on alpine
 # install_pkg perl-DBD-MariaDB  # skipped on alpine
 # install_pkg perl-DBD-Firebird  # skipped on alpine
-# install_pkg php  # skipped on alpine
-# install_pkg php-cli  # skipped on alpine
-# install_pkg php-common  # skipped on alpine
-# install_pkg php-fpm  # skipped on alpine
-# install_pkg php-gd  # skipped on alpine
-# install_pkg php-gmp  # skipped on alpine
-# install_pkg php-intl  # skipped on alpine
-# install_pkg php-mbstring  # skipped on alpine
-# install_pkg php-mysqlnd  # skipped on alpine
-# install_pkg php-pdo  # skipped on alpine
-# install_pkg php-pgsql  # skipped on alpine
-# install_pkg php-xml  # skipped on alpine
+# Enable Remi PHP 7.4 module stream before installing PHP packages.
+# casjay.repo excludes php* from AppStream to force Remi; the module must
+# be enabled first and AppStream excludes bypassed so dnf resolves from Remi.
+if type -P dnf >/dev/null 2>&1 && dnf module list php 2>/dev/null | grep -q 'remi-7.4'; then
+	dnf module reset php -y >/dev/null 2>&1 || true
+	dnf module enable php:remi-7.4 -y >/dev/null 2>&1 || true
+	_php_install_opts="--disableexcludes=casjay-os-appstream"
+fi
+install_pkg php $_php_install_opts
+install_pkg php-cli $_php_install_opts
+install_pkg php-common $_php_install_opts
+install_pkg php-fpm $_php_install_opts
+install_pkg php-gd $_php_install_opts
+install_pkg php-gmp $_php_install_opts
+install_pkg php-intl $_php_install_opts
+install_pkg php-mbstring $_php_install_opts
+install_pkg php-mysqlnd $_php_install_opts
+install_pkg php-pdo $_php_install_opts
+install_pkg php-pgsql $_php_install_opts
+install_pkg php-xml $_php_install_opts
+unset _php_install_opts
 install_pkg pinentry
 install_pkg postfix
 # install_pkg postfix-pcre  # skipped on alpine
