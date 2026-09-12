@@ -203,7 +203,6 @@ SCRIPT_NAME="$APPNAME"
 SCRIPT_NAME="${SCRIPT_NAME%.*}"
 RELEASE_VER="$(. /etc/os-release 2>/dev/null; echo "${VERSION_ID%%.*}")"
 RELEASE_NAME="$(. /etc/os-release 2>/dev/null; n="${NAME,,}"; echo "${n%% *}")"
-RELEASE_TYPE="$(. /etc/os-release 2>/dev/null; [[ " $ID_LIKE " == *centos* ]] && echo "alpine")"
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 DEFAULT_KERNEL="${DEFAULT_KERNEL:-kernel-ml}"
 ARCH="$(uname -m | tr '[:upper:]' '[:lower:]')"
@@ -226,7 +225,7 @@ case "${SET_HOSTNAME:-$HOSTNAME}" in
 	devel*|build*|ci*|testing*)      SYSTEM_TYPE="devel" ;;
 esac
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-SERVICES_ENABLE="docker apache2 nginx php-fpm83 postfix rsyslog sshd "
+SERVICES_ENABLE="docker apache2 fail2ban nginx php-fpm83 postfix rsyslog iptables ip6tables sshd "
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 SERVICES_DISABLE="avahi-daemon cups irqbalance"
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -278,7 +277,7 @@ copy_ca_certs() {
 	fi
 }
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-__dnf_yum() {
+__apk_add() {
 	apk "$@"
 }
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -355,7 +354,7 @@ run_init_check() {
 	apk update &>/dev/null || true
 }
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-__yum() {
+__apk() {
 	apk "$@" &>/dev/null || return 1
 }
 grab_remote_file() { urlverify "$1" && curl -q -SLs "$1" || exit 1; }
@@ -696,9 +695,9 @@ install_pkg certbot
 # install_pkg cockpit-system  # skipped on alpine
 # install_pkg cockpit-ws  # skipped on alpine
 install_pkg coreutils
-install_pkg cowsay
+# install_pkg cowsay  # skipped on alpine
 install_pkg cracklib
-install_pkg cracklib-dicts
+install_pkg cracklib-words
 install_pkg cronie
 # install_pkg cronie-noanacron  # skipped on alpine
 # install_pkg crontabs  # skipped on alpine
@@ -719,10 +718,10 @@ install_pkg grub
 # install_pkg grub2-tools-extra  # skipped on alpine
 # install_pkg grubby  # skipped on alpine
 install_pkg gzip
-install_pkg hardlink
+install_pkg util-linux-misc
 install_pkg harfbuzz
 install_pkg hdparm
-install_pkg hostname
+# install_pkg hostname  # skipped on alpine
 install_pkg htop
 install_pkg apache2
 install_pkg less
@@ -733,7 +732,7 @@ install_pkg make
 install_pkg man-db
 install_pkg man-pages
 install_pkg mlocate
-install_pkg apache2-mod-fcgid
+install_pkg apache-mod-fcgid
 # install_pkg mod_geoip  # skipped on alpine
 # install_pkg mod_http2  # skipped on alpine
 # install_pkg mod_maxminddb  # skipped on alpine
@@ -748,11 +747,10 @@ install_pkg munin
 # install_pkg munin-common  # skipped on alpine
 # install_pkg munin-node  # skipped on alpine
 install_pkg ncurses
-install_pkg ncurses-base
+# install_pkg ncurses-base  # skipped on alpine
 install_pkg ncurses-libs
 install_pkg net-tools
 install_pkg nginx
-install_pkg ntp
 # install_pkg oddjob-mkhomedir  # skipped on alpine
 install_pkg openssh-server
 install_pkg openssl
@@ -764,14 +762,6 @@ install_pkg perl-dbd-mysql
 # install_pkg perl-DBD-SQLite  # skipped on alpine
 # install_pkg perl-DBD-MariaDB  # skipped on alpine
 # install_pkg perl-DBD-Firebird  # skipped on alpine
-# Enable Remi PHP 7.4 module stream before installing PHP packages.
-# casjay.repo excludes php* from AppStream to force Remi; the module must
-# be enabled first and AppStream excludes bypassed so dnf resolves from Remi.
-if type -P dnf >/dev/null 2>&1 && dnf module list php 2>/dev/null | grep -q 'remi-7.4'; then
-	dnf module reset php -y >/dev/null 2>&1 || true
-	dnf module enable php:remi-7.4 -y >/dev/null 2>&1 || true
-	_php_install_opts="--disableexcludes=casjay-os-appstream"
-fi
 install_pkg php $_php_install_opts
 install_pkg php-cli $_php_install_opts
 install_pkg php-common $_php_install_opts
@@ -816,7 +806,7 @@ install_pkg screen
 install_pkg sed
 install_pkg sqlite
 install_pkg sudo
-install_pkg symlinks
+# install_pkg symlinks  # skipped on alpine
 install_pkg tar
 install_pkg tzdata
 install_pkg unzip
@@ -872,6 +862,7 @@ run_grub
 ##################################################################################################################
 printf_head "Installing custom web server files"
 ##################################################################################################################
+if [ "${PKMGR_MIN_CONFIG_SETUP:-yes}" != "no" ]; then
 [ -d "$CONFIG_TEMP_DIR" ] && devnull rm_if_exists "$CONFIG_TEMP_DIR"
 devnull git clone -q "https://github.com/casjay-base/alpine" "$CONFIG_TEMP_DIR"
 if [ -d "/var/www/localhost/htdocs/sysinfo/.git" ]; then
@@ -988,18 +979,37 @@ devnull find "$CONFIG_TEMP_DIR" -type f -exec sed -i "s#mycurrentipaddress_6#$my
 devnull find "$CONFIG_TEMP_DIR" -type f -exec sed -i "s#mycurrentipaddress_4#$mycurrentipaddress_4#g" {} \;
 if [ -n "$NETDEV" ]; then
 	fix_network_device_name "$CONFIG_TEMP_DIR"
-	if [ -f "/etc/sysconfig/network-scripts/ifcfg-eth0.sample" ]; then
-		devnull mv -f "/etc/sysconfig/network-scripts/ifcfg-eth0.sample" "/etc/sysconfig/network-scripts/ifcfg-$NETDEV.sample"
+	if [ -f "/etc/conf.d/network-scripts/ifcfg-eth0.sample" ]; then
+		devnull mv -f "/etc/conf.d/network-scripts/ifcfg-eth0.sample" "/etc/conf.d/network-scripts/ifcfg-$NETDEV.sample"
 	fi
 fi
 if [ -z "$does_lo_have_ipv6" ]; then
 	sed -i 's|inet_interfaces.*|inet_interfaces = 127.0.0.1|g' $CONFIG_TEMP_DIR/etc/postfix/main.cf
 fi
-devnull rm_if_exists $CONFIG_TEMP_DIR/etc/{fail2ban,shorewall,shorewall6}
+for fwdir in fail2ban iptables ip6tables; do
+	if [ -d "/etc/$fwdir" ]; then
+		devnull rm_if_exists "$CONFIG_TEMP_DIR/etc/$fwdir"
+	fi
+done
 devnull mkdir -p /etc/rsync.d /var/log/named
 devnull rsync -avhP $CONFIG_TEMP_DIR/{etc,root,usr,var}* /
-devnull sed -i "s#myserverdomainname#$HOSTNAME#g" /etc/sysconfig/network
-devnull sed -i "s#mydomain#$set_domainname#g" /etc/sysconfig/network
+fi
+if [ -f /etc/fail2ban/jail.local ]; then
+	# Every jail in jail.local is permanently enabled - min.sh only runs
+	# once, at bootstrap, so a jail could never be enabled later if it
+	# depended on detecting the service at bootstrap time. Instead we just
+	# make sure each jail's logpath exists (as an empty file, if needed) so
+	# fail2ban never errors on a missing log; once the real service is
+	# installed and starts writing to that same path, the already-running
+	# jail picks it up immediately with no further changes here.
+	devnull mkdir -p /var/log/proftpd /var/log/apache2 /var/log/nginx /var/log/named /var/log/mysql /var/opt/mssql/log
+	devnull touch /var/log/proftpd/auth.log /var/log/apache2/error_log \
+		/var/log/nginx/error.log /var/log/nginx/access.log \
+		/var/log/named/security.log /var/log/mysql/mysql.log \
+		/var/opt/mssql/log/errorlog /var/log/mail.log /var/log/auth.log
+fi
+devnull sed -i "s#myserverdomainname#$HOSTNAME#g" /etc/conf.d/network
+devnull sed -i "s#mydomain#$set_domainname#g" /etc/conf.d/network
 devnull chmod 644 -Rf /etc/cron.d/* /etc/logrotate.d/*
 devnull touch /etc/postfix/mydomains.pcre
 devnull chattr +i /etc/resolv.conf
@@ -1401,6 +1411,14 @@ elif [ "$SYSTEM_TYPE" = "dns" ] || [ "$set_domainname" = "casjaydns.com" ]; then
 		eval "$HOME/Projects/github/dfprivate/dns/install.sh" >/dev/null 2>&1
 	fi
 fi
+##################################################################################################################
+printf_head "Installing and enabling intrusion detection/prevention"
+##################################################################################################################
+install_pkg fail2ban
+install_pkg iptables
+# rkhunter (and every other rootkit/HIDS scanner checked: chkrootkit,
+# lynis, aide, samhain, tiger) has no Alpine package - skipped here only;
+# kept for all other distros
 ##################################################################################################################
 printf_head "Enabling services"
 ##################################################################################################################
