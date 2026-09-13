@@ -16,8 +16,6 @@
 # @@Terminal App     :  no
 # @@sudo/root        :  yes
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# shellcheck disable=SC1090
-# shellcheck disable=SC1091
 # shellcheck disable=SC2016
 # shellcheck disable=SC2031
 # shellcheck disable=SC2086
@@ -153,24 +151,54 @@ if [ ! -d "/usr/local/share/CasjaysDev/scripts" ]; then
 	sleep 5
 fi
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# Create apt shim so system-installer.bash recognises a package manager on Alpine
-if ! command -v apt >/dev/null 2>&1 && command -v apk >/dev/null 2>&1; then
-	printf '#!/bin/sh\nexec apk add --no-cache "$@"\n' >/usr/local/bin/apt && chmod +x /usr/local/bin/apt
-fi
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# Set functions
-SCRIPTSFUNCTURL="${SCRIPTSFUNCTURL:-https://github.com/casjay-dotfiles/scripts/raw/main/functions}"
-SCRIPTSFUNCTDIR="${SCRIPTSFUNCTDIR:-/usr/local/share/CasjaysDev/scripts}"
-SCRIPTSFUNCTFILE="${SCRIPTSFUNCTFILE:-system-installer.bash}"
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-if [ -f "../functions/$SCRIPTSFUNCTFILE" ]; then
-	. "../functions/$SCRIPTSFUNCTFILE"
-elif [ -f "$SCRIPTSFUNCTDIR/functions/$SCRIPTSFUNCTFILE" ]; then
-	. "$SCRIPTSFUNCTDIR/functions/$SCRIPTSFUNCTFILE"
+# Vendored from casjay-dotfiles/scripts system-installer.bash (self-contained,
+# no network fetch) - only the functions this script actually calls.
+if [ -n "${NO_COLOR+x}" ] || [ "$SHOW_RAW" = "true" ]; then
+	printf_color() { printf '%b' "$1" | tr -d '\t'; }
 else
-	curl -LSs "$SCRIPTSFUNCTURL/$SCRIPTSFUNCTFILE" -o "/tmp/$SCRIPTSFUNCTFILE" || exit 1
-	. "/tmp/$SCRIPTSFUNCTFILE"
+	printf_color() { printf "%b" "$(tput setaf "$2" 2>/dev/null)" "$1" "$(tput sgr0 2>/dev/null)"; }
 fi
+printf_green() { printf_color "$1\n" 2; }
+printf_red() { printf_color "$1\n" 208; }
+printf_yellow() { printf_color "$1\n" 3; }
+printf_blue() { printf_color "$1\n" 33; }
+printf_cyan() { printf_color "$1\n" 6; }
+printf_exit() {
+	printf_color "$1\n" 208 1>&2
+	exit 1
+}
+printf_execute_success() { printf_color "[ ✔ ] $1 \n" 2; }
+printf_execute_error() { printf_color "[ ✖ ] $1 $2 \n" 1; }
+printf_execute_error_stream() { while read -r line; do printf_execute_error "↳ ERROR: $line"; done; }
+printf_return() {
+	test -n "$1" && test -z "${1//[0-9]/}" && local color="$1" && shift 1 || local color="208"
+	test -n "$1" && test -z "${1//[0-9]/}" && local exitCode="$1" && shift 1 || local exitCode="1"
+	local msg="$*"
+	[ ${#msg} = 0 ] || { printf_color "$msg" "$color" 1>&2 && printf "\n"; }
+	return ${exitCode:-2}
+}
+devnull() { "$@" >/dev/null 2>&1; }
+urlcheck() { devnull curl --output /dev/null --silent --head --fail "$1"; }
+urlinvalid() {
+	if [ -z "$1" ]; then
+		printf_red "Invalid URL\n"
+	else
+		printf_red "Can't find $1\n"
+	fi
+	exit 1
+}
+urlverify() { urlcheck $1 || urlinvalid $1; }
+setexitstatus() {
+	EXIT="${EXIT:-$?}"
+	local EXITSTATUS+="$EXIT"
+	if [ -z "$EXITSTATUS" ] || [ "$EXITSTATUS" -ne 0 ]; then
+		BG_EXIT="${BG_RED}"
+		return 1
+	else
+		BG_EXIT="${BG_GREEN}"
+		return 0
+	fi
+}
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Override execute() for Alpine busybox mktemp compatibility
 execute() {
