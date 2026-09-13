@@ -862,7 +862,7 @@ run_grub
 ##################################################################################################################
 printf_head "Installing custom web server files"
 ##################################################################################################################
-if [ "${PKMGR_MIN_CONFIG_SETUP:-yes}" != "no" ]; then
+if [ "${PKMGR_CONFIG_SETUP:-yes}" != "no" ]; then
 [ -d "$CONFIG_TEMP_DIR" ] && devnull rm_if_exists "$CONFIG_TEMP_DIR"
 devnull git clone -q "https://github.com/casjay-base/alpine" "$CONFIG_TEMP_DIR"
 if [ -d "/var/www/localhost/htdocs/sysinfo/.git" ]; then
