@@ -481,6 +481,10 @@ __run_grub() {
 		if [ -n "$grub_efi" ]; then
 			for efi in $grub_efi; do
 				if [ -e "$efi" ]; then
+					# EL9+/Fedora/Debian ship /boot/efi/EFI/{distro}/grub.cfg as a stub that only chainloads the real grub.cfg - grub-mkconfig refuses to overwrite it, so skip it
+					if grep -qs -- 'configfile' "$efi" && ! grep -qs -- 'BEGIN /etc/grub.d/' "$efi"; then
+						continue
+					fi
 					if __devnull $grub_bin -o "$efi"; then
 						__printf_green "Updated $efi"
 					else
@@ -850,7 +854,7 @@ __install_pkg zlib
 printf_head "Installing version-specific packages"
 ##################################################################################################################
 # Select PHP slot matching the running Alpine version
-_ALPINE_VER="$(cat /etc/alpine-release 2>/dev/null | cut -d. -f1,2)"
+_ALPINE_VER="$(cut -d. -f1,2 /etc/alpine-release 2>/dev/null)"
 case "$_ALPINE_VER" in
     3.1[0-3]*) _PHP="php7" ;;
     3.1[45]*)  _PHP="php8" ;;
@@ -1034,7 +1038,7 @@ if [ -f /etc/fail2ban/jail.local ]; then
 	__devnull touch /var/log/proftpd/auth.log /var/log/apache2/error_log \
 		/var/log/nginx/error.log /var/log/nginx/access.log \
 		/var/log/named/security.log /var/log/mysql/mysql.log \
-		/var/opt/mssql/log/errorlog /var/log/mail.log /var/log/auth.log
+		/var/opt/mssql/log/errorlog /var/log/mail.log /var/log/auth.log /var/log/fail2ban.log
 fi
 __devnull sed -i "s#myserverdomainname#$HOSTNAME#g" /etc/conf.d/network
 __devnull sed -i "s#mydomain#$set_domainname#g" /etc/conf.d/network
