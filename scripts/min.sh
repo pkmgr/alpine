@@ -735,7 +735,8 @@ __install_pkg dialog
 __install_pkg docker
 __install_pkg ethtool
 __install_pkg findutils
-__install_pkg fortune-mod
+# __install_pkg fortune-mod  # renamed on alpine
+__install_pkg fortune
 __install_pkg gawk
 __install_pkg gc
 __install_pkg gcc
