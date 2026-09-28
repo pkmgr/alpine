@@ -327,7 +327,7 @@ case "${SET_HOSTNAME:-$HOSTNAME}" in
 	devel*|build*|ci*|testing*)      SYSTEM_TYPE="devel" ;;
 esac
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-SERVICES_ENABLE="docker apache2 nginx php-fpm83 postfix rsyslog sshd "
+SERVICES_ENABLE="docker apache2 fail2ban nginx php-fpm83 postfix rsyslog sshd "
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 SERVICES_DISABLE="avahi-daemon cups irqbalance"
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -1556,16 +1556,17 @@ __printf_head "Configuring the firewall"
 ##################################################################################################################
 __devnull apk add --no-cache iptables
 __devnull rc-update add iptables default 2>/dev/null || true
-# Allow SSH, HTTP, HTTPS, and mosh ports
+# Firewall policy (AI.md's "Firewall policy" section): allow everything
+# by default, fail2ban is the actual protection layer - a default-DROP
+# policy with a hand-maintained allowlist here contradicts that policy
+# and risks silently breaking docker/incus/libvirt/podman traffic that
+# was never accounted for in the allowlist. SMB/NetBIOS is the one
+# static exception, dropped outright (DROP, not REJECT, so a scan gets
+# silence instead of a reply that confirms something is listening).
 iptables -F INPUT 2>/dev/null || true
-iptables -P INPUT DROP
-iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-iptables -A INPUT -i lo -j ACCEPT
-iptables -A INPUT -p icmp -j ACCEPT
-iptables -A INPUT -p tcp --dport 22 -j ACCEPT
-iptables -A INPUT -p tcp --dport 80 -j ACCEPT
-iptables -A INPUT -p tcp --dport 443 -j ACCEPT
-iptables -A INPUT -p udp --dport 60000:61000 -j ACCEPT
+iptables -P INPUT ACCEPT
+iptables -A INPUT -p tcp -m multiport --dports 139,445 -j DROP
+iptables -A INPUT -p udp -m multiport --dports 137,138 -j DROP
 __devnull rc-service iptables save 2>/dev/null || true
 ##################################################################################################################
 __printf_head "Disabling dnsmasq"
