@@ -1556,13 +1556,7 @@ __printf_head "Configuring the firewall"
 ##################################################################################################################
 __devnull apk add --no-cache iptables
 __devnull rc-update add iptables default 2>/dev/null || true
-# Firewall policy (AI.md's "Firewall policy" section): allow everything
-# by default, fail2ban is the actual protection layer - a default-DROP
-# policy with a hand-maintained allowlist here contradicts that policy
-# and risks silently breaking docker/incus/libvirt/podman traffic that
-# was never accounted for in the allowlist. SMB/NetBIOS is the one
-# static exception, dropped outright (DROP, not REJECT, so a scan gets
-# silence instead of a reply that confirms something is listening).
+# Allow everything by default, fail2ban is the real protection layer; SMB/NetBIOS is dropped outright (never reject - it replies).
 iptables -F INPUT 2>/dev/null || true
 iptables -P INPUT ACCEPT
 iptables -A INPUT -p tcp -m multiport --dports 139,445 -j DROP
